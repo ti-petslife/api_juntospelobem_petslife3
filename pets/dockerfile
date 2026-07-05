@@ -1,12 +1,24 @@
-FROM eclipse-temurin:25-jre-alpine
+# 1. Estágio de Compilação (Build)
+FROM maven:3.9-eclipse-temurin-21-alpine AS build
+WORKDIR /app
+
+# Copia os arquivos de configuração do Maven e o código fonte
+COPY pom.xml .
+COPY src ./src
+
+# Compila o projeto gerando o JAR e pulando os testes para agilizar o deploy
+RUN mvn clean package -DskipTests
+
+# 2. Estágio de Execução (Runtime)
+FROM eclipse-temurin:25-ea-jre-alpine
 WORKDIR /app
 
 # Cria um usuário de sistema comum por segurança
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
 
-# Copia o JAR que já foi criado na sua máquina local
-COPY target/pets-0.0.1-SNAPSHOT.jar app.jar
+# Copia o JAR gerado no estágio anterior
+COPY --from=build /app/target/pets-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-Dserver.port=${PORT:8080}", "-jar", "app.jar"]
