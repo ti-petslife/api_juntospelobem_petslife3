@@ -1,6 +1,9 @@
-# 1. Estágio de Compilação (Build)
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+# 1. Estágio de Compilação (Build) usando JDK 25 oficial
+FROM openjdk:25-jdk-slim AS build
 WORKDIR /app
+
+# Instala o Maven manualmente já que imagens prontas de Maven+Java25 são raras
+RUN apt-get update && apt-get install -y maven
 
 # Copia os arquivos de configuração do Maven e o código fonte
 COPY pom.xml .
@@ -9,12 +12,12 @@ COPY src ./src
 # Compila o projeto gerando o JAR e pulando os testes para agilizar o deploy
 RUN mvn clean package -DskipTests
 
-# 2. Estágio de Execução (Runtime)
-FROM eclipse-temurin:25-ea-jre-alpine
+# 2. Estágio de Execução (Runtime) usando o Runtime do Java 25
+FROM openjdk:25-slim
 WORKDIR /app
 
 # Cria um usuário de sistema comum por segurança
-RUN addgroup -S spring && adduser -S spring -G spring
+RUN useradd -m spring
 USER spring:spring
 
 # Copia o JAR gerado no estágio anterior
