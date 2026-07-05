@@ -24,6 +24,16 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
 
         System.out.println("HEADER AUTHORIZATION RECEBIDO: " + request.getHeader("Authorization"));
 
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+            response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            response.setHeader("Access-Control-Allow-Headers", "*"); 
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            
+            response.setStatus(HttpServletResponse.SC_OK);
+            return; 
+        }
+
         if (request.getRequestURI().startsWith("/api/auth")) {
             filterChain.doFilter(request, response);
             return;
@@ -33,7 +43,8 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Acesso negado. Token ausente ou mal formatado.");
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"error\": \"Acesso negado. Token ausente ou mal formatado.\"}");
             return;
         }
 
@@ -46,7 +57,8 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
             }
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("Acesso negado. Token invalido ou expirado.");
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"error\": \"Acesso negado. Token invalido ou expirado.\"}");
             return; 
         }
 
