@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"http://localhost:5173", "https://juntospelobem.petslife.vet.br"}, allowCredentials = "true")
 public class AuthController {
 
     

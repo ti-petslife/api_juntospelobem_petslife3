@@ -24,17 +24,13 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
 
         System.out.println("HEADER AUTHORIZATION RECEBIDO: " + request.getHeader("Authorization"));
 
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-            response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            response.setHeader("Access-Control-Allow-Headers", "*"); 
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-            
-            response.setStatus(HttpServletResponse.SC_OK);
-            return; 
-        }
+        String uri = request.getRequestURI();
+        boolean rotaLiberada = switch (uri) {
+            case String s when s.startsWith("/api/auth") -> true;
+            default -> false;
+        };
 
-        if (request.getRequestURI().startsWith("/api/auth")) {
+        if (rotaLiberada) {
             filterChain.doFilter(request, response);
             return;
         }
