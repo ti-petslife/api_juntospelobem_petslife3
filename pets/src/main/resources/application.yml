@@ -8,8 +8,8 @@ spring:
   mail:
     host: smtp.office365.com
     port: 587
-    username: "noreply@grupoagrofarm.com.br"
-    password: "Mudar124!"
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD}
     properties:
       mail:
         smtp:
@@ -21,11 +21,12 @@ spring:
 api:
   security:
     token:
-      secret: "minha-chave-secreta-muito-longa-e-complexa-para-o-jwt-da-empresa"
+      secret: ${JWT_SECRET}
       expiration-minutes: 60
 
 bitrix:
   webhook:
+    url: ${BITRIX_WEBHOOK_URL}
     url: "https://grupoagrofarm.bitrix24.com.br/rest/277/jver0jmyw92i6pkt/"
   spa:
     clientes-id: 1174
