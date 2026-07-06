@@ -27,7 +27,6 @@ api:
 bitrix:
   webhook:
     url: ${BITRIX_WEBHOOK_URL}
-    url: "https://grupoagrofarm.bitrix24.com.br/rest/277/jver0jmyw92i6pkt/"
   spa:
     clientes-id: 1174
     cards-id: 1218
