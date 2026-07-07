@@ -74,18 +74,20 @@ public class BitrixClient {
             throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
     }
-   public List<CardResponse> buscarCardsPorDocumento(String documento) {
+public List<CardResponse> buscarCardsPorDocumento(String documento) {
         
-        // 1. Limpamos a formatação: o Bitrix espera os números puros
         String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
         
+        if (apenasNumeros.isEmpty()) {
+            return List.of();
+        }
+
         String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
 
         String url = UriComponentsBuilder.fromUriString(baseUrl) 
                 .queryParam("entityTypeId", this.spaCardsId)
                 .queryParam("filter[categoryId]", this.categoriaCardsId)
-                // 💡 AGORA SIM, O JEITO SÊNIOR: Chave exata em camelCase!
-                .queryParam("filter[ufCrm96Cgc]", apenasNumeros) 
+                .queryParam("filter[=UF_CRM_96_CGC]", apenasNumeros) 
                 .queryParam("select[]", "id")
                 .queryParam("select[]", "ufCrm78_1782267707")
                 .queryParam("select[]", "stageId")
@@ -94,6 +96,8 @@ public class BitrixClient {
                 .queryParam("select[]", "ufCrm96Numnota")
                 .queryParam("select[]", "ufCrm96Linkcupom")
                 .queryParam("select[]", "ufCrm96Qtcupons")
+                .queryParam("select[]", "UF_CRM_96_CGC") 
+                .queryParam("select[]", "ufCrm96Cgc")
                 .toUriString();
 
         try {
@@ -110,7 +114,19 @@ public class BitrixClient {
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
 
                 if (items != null && !items.isEmpty()) {
+                    
+              
+                    System.out.println("🔍 CHAVES RETORNADAS PELO BITRIX: " + items.get(0).keySet());
+
                     return items.stream()
+                          
+                            .filter(deal -> {
+                                Object cgcObj = deal.get("ufCrm96Cgc");
+                                if (cgcObj == null) cgcObj = deal.get("UF_CRM_96_CGC");
+                                if (cgcObj == null) cgcObj = deal.get("ufCrm96_CGC");
+                                
+                                return cgcObj != null && apenasNumeros.equals(cgcObj.toString().replaceAll("\\D", ""));
+                            })
                             .map(this::converterParaCardResponse)
                             .toList(); 
                 }
