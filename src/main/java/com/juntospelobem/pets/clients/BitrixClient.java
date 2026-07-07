@@ -82,15 +82,15 @@ public class BitrixClient {
         String url = UriComponentsBuilder.fromUriString(baseUrl) 
                 .queryParam("entityTypeId", this.spaCardsId)
                 .queryParam("filter[categoryId]", this.categoriaCardsId)
-                .queryParam("filter[UF_CRM_96_C_GC]", documentoFormatado)
+                .queryParam("filter[ufCrm96_CGC]", documentoFormatado)
                 .queryParam("select[]", "id")
                 .queryParam("select[]", "ufCrm78_1782267707")
                 .queryParam("select[]", "stageId")
                 .queryParam("select[]", "createdTime")
                 .queryParam("select[]", "opportunity")
                 .queryParam("select[]", "ufCrm96Numnota")
-                .queryParam("select[]", "ufCrm96Linkcupom") // Adicionado
-                .queryParam("select[]", "ufCrm96Qtcupons")  // Adicionado
+                .queryParam("select[]", "ufCrm96Linkcupom")
+                .queryParam("select[]", "ufCrm96Qtcupons")
                 .toUriString();
 
         try {
