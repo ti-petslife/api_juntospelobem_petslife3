@@ -74,15 +74,16 @@ public class BitrixClient {
             throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
     }
-
-    public List<CardResponse> buscarCardsPorDocumento(String documento) {
-        String documentoFormatado = aplicarMascaraBitrix(documento);
+        public List<CardResponse> buscarCardsPorDocumento(String documento) {
+        
+        String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
+        
         String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
 
         String url = UriComponentsBuilder.fromUriString(baseUrl) 
                 .queryParam("entityTypeId", this.spaCardsId)
                 .queryParam("filter[categoryId]", this.categoriaCardsId)
-                .queryParam("filter[ufCrm96_CGC]", documentoFormatado)
+                .queryParam("filter[ufCrm96Cgc]", apenasNumeros) 
                 .queryParam("select[]", "id")
                 .queryParam("select[]", "ufCrm78_1782267707")
                 .queryParam("select[]", "stageId")
