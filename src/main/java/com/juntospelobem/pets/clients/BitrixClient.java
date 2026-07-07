@@ -76,23 +76,24 @@ public class BitrixClient {
     }
         public List<CardResponse> buscarCardsPorDocumento(String documento) {
         
-        String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
-        
-        String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
-
-        String url = UriComponentsBuilder.fromUriString(baseUrl) 
-                .queryParam("entityTypeId", this.spaCardsId)
-                .queryParam("filter[categoryId]", this.categoriaCardsId)
-                .queryParam("filter[ufCrm96Cgc]", apenasNumeros) 
-                .queryParam("select[]", "id")
-                .queryParam("select[]", "ufCrm78_1782267707")
-                .queryParam("select[]", "stageId")
-                .queryParam("select[]", "createdTime")
-                .queryParam("select[]", "opportunity")
-                .queryParam("select[]", "ufCrm96Numnota")
-                .queryParam("select[]", "ufCrm96Linkcupom")
-                .queryParam("select[]", "ufCrm96Qtcupons")
-                .toUriString();
+         String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
+                 
+         String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
+                 
+         String url = UriComponentsBuilder.fromUriString(baseUrl) 
+            .queryParam("entityTypeId", this.spaCardsId)
+            .queryParam("filter[categoryId]", this.categoriaCardsId)
+            // 💡 JEITO SÊNIOR: Chave EXATA e maiúscula, sem o underscore extra (UF_CRM_96_CGC)
+            .queryParam("filter[UF_CRM_96_CGC]", apenasNumeros) 
+            .queryParam("select[]", "id")
+            .queryParam("select[]", "ufCrm78_1782267707")
+            .queryParam("select[]", "stageId")
+            .queryParam("select[]", "createdTime")
+            .queryParam("select[]", "opportunity")
+            .queryParam("select[]", "ufCrm96Numnota")
+            .queryParam("select[]", "ufCrm96Linkcupom")
+            .queryParam("select[]", "ufCrm96Qtcupons")
+            .toUriString();
 
         try {
             Map<String, Object> response = restClient.get()
