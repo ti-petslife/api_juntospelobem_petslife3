@@ -76,18 +76,15 @@ public class BitrixClient {
     }
 public List<CardResponse> buscarCardsPorDocumento(String documento) {
         
-        String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
+        String docLimpoPesquisa = documento != null ? documento.replaceAll("\\D", "") : "";
         
-        if (apenasNumeros.isEmpty()) {
-            return List.of();
-        }
+        if (docLimpoPesquisa.isEmpty()) return List.of();
 
         String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
 
         String url = UriComponentsBuilder.fromUriString(baseUrl) 
                 .queryParam("entityTypeId", this.spaCardsId)
                 .queryParam("filter[categoryId]", this.categoriaCardsId)
-                .queryParam("filter[=UF_CRM_96_CGC]", apenasNumeros) 
                 .queryParam("select[]", "id")
                 .queryParam("select[]", "ufCrm78_1782267707")
                 .queryParam("select[]", "stageId")
@@ -101,31 +98,26 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
                 .toUriString();
 
         try {
-            Map<String, Object> response = restClient.get()
-                    .uri(url)
-                    .retrieve()
-                    .body(Map.class);
+            Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
 
             if (response != null && response.containsKey("result")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> result = (Map<String, Object>) response.get("result");
-                
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
 
                 if (items != null && !items.isEmpty()) {
                     
-              
-                    System.out.println("🔍 CHAVES RETORNADAS PELO BITRIX: " + items.get(0).keySet());
-
                     return items.stream()
-                          
                             .filter(deal -> {
-                                Object cgcObj = deal.get("ufCrm96Cgc");
-                                if (cgcObj == null) cgcObj = deal.get("UF_CRM_96_CGC");
-                                if (cgcObj == null) cgcObj = deal.get("ufCrm96_CGC");
+                                Object cgcBitrix = deal.get("ufCrm96Cgc");
+                                if (cgcBitrix == null) cgcBitrix = deal.get("UF_CRM_96_CGC");
                                 
-                                return cgcObj != null && apenasNumeros.equals(cgcObj.toString().replaceAll("\\D", ""));
+                                if (cgcBitrix == null) return false; 
+
+                                String docLimpoBitrix = cgcBitrix.toString().replaceAll("\\D", "");
+                                
+                                return docLimpoPesquisa.equals(docLimpoBitrix);
                             })
                             .map(this::converterParaCardResponse)
                             .toList(); 
