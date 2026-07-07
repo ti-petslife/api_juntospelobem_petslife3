@@ -74,26 +74,27 @@ public class BitrixClient {
             throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
     }
-        public List<CardResponse> buscarCardsPorDocumento(String documento) {
+   public List<CardResponse> buscarCardsPorDocumento(String documento) {
         
-         String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
-                 
-         String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
-                 
-         String url = UriComponentsBuilder.fromUriString(baseUrl) 
-            .queryParam("entityTypeId", this.spaCardsId)
-            .queryParam("filter[categoryId]", this.categoriaCardsId)
-            // 💡 JEITO SÊNIOR: Chave EXATA e maiúscula, sem o underscore extra (UF_CRM_96_CGC)
-            .queryParam("filter[UF_CRM_96_CGC]", apenasNumeros) 
-            .queryParam("select[]", "id")
-            .queryParam("select[]", "ufCrm78_1782267707")
-            .queryParam("select[]", "stageId")
-            .queryParam("select[]", "createdTime")
-            .queryParam("select[]", "opportunity")
-            .queryParam("select[]", "ufCrm96Numnota")
-            .queryParam("select[]", "ufCrm96Linkcupom")
-            .queryParam("select[]", "ufCrm96Qtcupons")
-            .toUriString();
+        // 1. Limpamos a formatação: o Bitrix espera os números puros
+        String apenasNumeros = documento != null ? documento.replaceAll("\\D", "") : "";
+        
+        String baseUrl = this.bitrixWebhookUrl + "crm.item.list.json";
+
+        String url = UriComponentsBuilder.fromUriString(baseUrl) 
+                .queryParam("entityTypeId", this.spaCardsId)
+                .queryParam("filter[categoryId]", this.categoriaCardsId)
+                // 💡 AGORA SIM, O JEITO SÊNIOR: Chave exata em camelCase!
+                .queryParam("filter[ufCrm96Cgc]", apenasNumeros) 
+                .queryParam("select[]", "id")
+                .queryParam("select[]", "ufCrm78_1782267707")
+                .queryParam("select[]", "stageId")
+                .queryParam("select[]", "createdTime")
+                .queryParam("select[]", "opportunity")
+                .queryParam("select[]", "ufCrm96Numnota")
+                .queryParam("select[]", "ufCrm96Linkcupom")
+                .queryParam("select[]", "ufCrm96Qtcupons")
+                .toUriString();
 
         try {
             Map<String, Object> response = restClient.get()
@@ -143,7 +144,7 @@ public class BitrixClient {
                 
                 if (items != null && !items.isEmpty()) {
                     Map<String, Object> contato = items.get(0);
-                    
+                    System.out.println("Chaves do Bitrix: " + items.get(0).keySet());
                     String id = contato.get("ufCrm78_1782267707") != null ? contato.get("ufCrm78_1782267707").toString() : "";
                     String email = (String) contato.get("ufCrm78_1782267174");
                     
