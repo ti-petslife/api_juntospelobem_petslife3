@@ -28,7 +28,7 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
-   public void gerarEEnviarCodigo(String documento) {
+   public String gerarEEnviarCodigo(String documento) {
         
         ClienteDados dadosCliente = bitrixClient.buscarDadosClientePorDocumento(documento);
 
@@ -37,13 +37,27 @@ public class AuthService {
         Cache cache = Objects.requireNonNull(cacheManager.getCache("otpCache"));
         cache.put(documento, codigoOtp);
 
-        // 2. Passamos os dados extraídos do pacote para o EmailService
         emailService.enviarCodigo(dadosCliente.email(), codigoOtp, dadosCliente.id());
+        
+        return mascararEmail(dadosCliente.email());
+    }
+
+    private String mascararEmail(String email) {
+        if (email == null || !email.contains("@")) return "";
+        
+        String[] partes = email.split("@");
+        String nome = partes[0];
+        String dominio = partes[1];
+        
+        if (nome.length() <= 1) return email;
+        
+        String mascarado = nome.charAt(0) + "*".repeat(nome.length() - 1);
+        
+        return mascarado + "@" + dominio;
     }
 
     public AuthTokenResponse validarCodigoEGerarToken(String documento, String codigoDigitado) {
         Cache cache = Objects.requireNonNull(cacheManager.getCache("otpCache"));
-        
         String codigoSalvo = cache.get(documento, String.class);
 
         if (codigoSalvo == null || !codigoSalvo.equals(codigoDigitado)) {
@@ -51,7 +65,6 @@ public class AuthService {
         }
 
         cache.evict(documento);
-
         String tokenJwt = jwtService.gerarToken(documento);
         return new AuthTokenResponse(tokenJwt, "Bearer");
     }
