@@ -6,10 +6,11 @@ import com.juntospelobem.pets.exceptions.ClienteNaoEncontradoException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
+
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.net.URLEncoder;
+import java.util.*;
 
 @Component
 public class BitrixClient {
@@ -23,7 +24,7 @@ public class BitrixClient {
     private final int categoriaClientesId;
     private final int categoriaCardsId;
 
-   public BitrixClient(
+    public BitrixClient(
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
             @Value("${bitrix.spa.clientes-id}") int spaClientesId,
             @Value("${bitrix.spa.cards-id}") int spaCardsId,
@@ -39,33 +40,27 @@ public class BitrixClient {
         this.restClient = RestClient.create(); 
     }
 
-
     public String buscarEmailPorDocumento(String documento) {
         ClienteDados dados = buscarDadosClientePorDocumento(documento);
         return dados.email(); 
     }
 
-   public List<CardResponse> buscarCardsPorDocumento(String documento) {
-        if (documento == null || documento.isBlank()) return List.of();
+    public List<CardResponse> buscarCardsPorDocumento(String documento) {
+        Set<String> variacoes = gerarVariacoesDocumento(documento);
+        if (variacoes.isEmpty()) return List.of();
 
-        String docApenasNumeros = documento.replaceAll("\\D", "");
-        if (docApenasNumeros.isEmpty()) return List.of();
+        List<Map<String, Object>> items = List.of();
 
-        String docFormatado = aplicarMascaraBitrix(documento);
-        List<Map<String, Object>> items = executarConsultaCardsBitrix(docFormatado);
-
-        if (items.isEmpty()) {
-            items = executarConsultaCardsBitrix(docApenasNumeros);
-        }
-
-        if (items.isEmpty() && docApenasNumeros.startsWith("0")) {
-            String docSemZeroInicial = docApenasNumeros.replaceFirst("^0+", "");
-            System.out.println("⚠️ Tentando buscar cards sem o zero à esquerda: " + docSemZeroInicial);
-            items = executarConsultaCardsBitrix(docSemZeroInicial);
+        for (String termoBusca : variacoes) {
+            items = executarConsultaCardsBitrix(termoBusca);
+            if (!items.isEmpty()) {
+                System.out.println("✅ Cards encontrados no Bitrix usando o termo: " + termoBusca);
+                break; 
+            }
         }
 
         if (items.isEmpty()) {
-            System.out.println("⚠️ Nenhum card encontrado para o documento nas 3 tentativas de busca.");
+            System.out.println("⚠️ Nenhum card encontrado no Bitrix para o documento informado.");
             return List.of();
         }
 
@@ -74,8 +69,53 @@ public class BitrixClient {
                 .toList();
     }
 
+    public ClienteDados buscarDadosClientePorDocumento(String documento) {
+        Set<String> variacoes = gerarVariacoesDocumento(documento);
+        if (variacoes.isEmpty()) {
+            throw new ClienteNaoEncontradoException("Documento inválido ou não informado.");
+        }
+
+        List<Map<String, Object>> resultadosBusca = List.of();
+
+        for (String termoBusca : variacoes) {
+            System.out.println("🔍 Consultando cliente no Bitrix com termo: " + termoBusca);
+            resultadosBusca = executarConsultaClientesBitrix(termoBusca);
+            if (resultadosBusca != null && !resultadosBusca.isEmpty()) {
+                System.out.println("✅ Cliente localizado no Bitrix usando o termo: " + termoBusca);
+                break; 
+            }
+        }
+
+        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
+            throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
+        }
+
+        System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + resultadosBusca.size() + " cadastros!");
+
+        final Map<String, Object> contatoFallback = resultadosBusca.get(0);
+
+        return resultadosBusca.stream()
+                .filter(item -> {
+                    String email = (String) item.get("ufCrm78_1782267174");
+                    return email != null && !email.trim().isEmpty() && email.contains("@");
+                })
+                .findFirst() 
+                .map(item -> {
+                    String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
+                    String email = (String) item.get("ufCrm78_1782267174");
+                    System.out.println("✅ Email validado e selecionado: " + email);
+                    return new ClienteDados(id, email);
+                })
+                .orElseGet(() -> {
+                    System.out.println("⚠️ Nenhum e-mail válido encontrado na lista. Usando fallback de segurança.");
+                    String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
+                    String email = (String) contatoFallback.get("ufCrm78_1782267174");
+                    return new ClienteDados(id, email);
+                });
+    }
+
     private List<Map<String, Object>> executarConsultaCardsBitrix(String valorCgc) {
-        String docCodificado = java.net.URLEncoder.encode(valorCgc, java.nio.charset.StandardCharsets.UTF_8);
+        String docCodificado = URLEncoder.encode(valorCgc, StandardCharsets.UTF_8);
 
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaCardsId +
@@ -106,45 +146,9 @@ public class BitrixClient {
             return List.of();
         }
     }
-public ClienteDados buscarDadosClientePorDocumento(String documento) {
-        List<Map<String, Object>> resultadosBusca = executarConsultaClientesBitrix(aplicarMascaraBitrix(documento));
-
-        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
-            System.out.println("⚠️ Cliente não encontrado com máscara. Tentando busca pelos números crus...");
-            String documentoCru = documento.replaceAll("\\D", "");
-            resultadosBusca = executarConsultaClientesBitrix(documentoCru);
-        }
-
-        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
-             throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
-        }
-
-        System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + resultadosBusca.size() + " cadastros!");
-
-        final Map<String, Object> contatoFallback = resultadosBusca.get(0);
-
-        return resultadosBusca.stream()
-                .filter(item -> {
-                    String email = (String) item.get("ufCrm78_1782267174");
-                    return email != null && !email.trim().isEmpty() && email.contains("@");
-                })
-                .findFirst() 
-                .map(item -> {
-                    String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
-                    String email = (String) item.get("ufCrm78_1782267174");
-                    System.out.println("✅ Email validado e selecionado: " + email);
-                    return new ClienteDados(id, email);
-                })
-                .orElseGet(() -> {
-                    System.out.println("⚠️ Nenhum e-mail válido encontrado. Usando fallback de segurança.");
-                    String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
-                    String email = (String) contatoFallback.get("ufCrm78_1782267174");
-                    return new ClienteDados(id, email);
-                });
-    }
 
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
-        String docCodificado = java.net.URLEncoder.encode(valorBusca, java.nio.charset.StandardCharsets.UTF_8);
+        String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
 
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
@@ -169,37 +173,65 @@ public ClienteDados buscarDadosClientePorDocumento(String documento) {
         }
     }
 
+    private Set<String> gerarVariacoesDocumento(String documento) {
+        if (documento == null || documento.isBlank()) return Collections.emptySet();
+
+        String apenasNumeros = documento.replaceAll("\\D", "");
+        Set<String> variacoes = new LinkedHashSet<>();
+
+        variacoes.add(aplicarMascaraBitrix(documento));
+
+        if (apenasNumeros.length() > 0 && apenasNumeros.length() <= 11) {
+            variacoes.add(String.format("%11s", apenasNumeros).replace(' ', '0'));
+        } else if (apenasNumeros.length() > 11 && apenasNumeros.length() <= 14) {
+            variacoes.add(String.format("%14s", apenasNumeros).replace(' ', '0'));
+        } else {
+            variacoes.add(apenasNumeros);
+        }
+
+        String semZerosIniciais = apenasNumeros.replaceFirst("^0+", "");
+        if (!semZerosIniciais.isEmpty()) {
+            variacoes.add(semZerosIniciais);
+        }
+
+        return variacoes;
+    }
+
     private String aplicarMascaraBitrix(String documento) {
-        if (documento == null) return "";
+        if (documento == null || documento.isBlank()) return "";
 
         String apenasNumeros = documento.replaceAll("\\D", "");
 
-        if (apenasNumeros.length() == 11) {
-            return apenasNumeros.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
-        } else if (apenasNumeros.length() == 14) {
-            return apenasNumeros.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
+        if (apenasNumeros.length() <= 11) {
+            String cpfPad = String.format("%11s", apenasNumeros).replace(' ', '0');
+            return cpfPad.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
+        } 
+        
+        if (apenasNumeros.length() <= 14) {
+            String cnpjPad = String.format("%14s", apenasNumeros).replace(' ', '0');
+            return cnpjPad.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
         }
 
         return documento;
     }
 
-   private CardResponse converterParaCardResponse(Map<String, Object> deal) {
-    String id = deal.get("id") != null ? deal.get("id").toString() : null;
-    String status = (String) deal.get("stageId");
-    String dataCriacao = (String) deal.get("createdTime");
-    
-    String link = obterValorSeguro(deal, "ufCrm96Linkcupom", "UF_CRM_96_LINKCUPOM"); 
-    
-    String numNotaStr = obterValorSeguro(deal, "ufCrm96Numnota", "UF_CRM_96_NUMNOTA");
-    Integer numeroNotaFiscal = numNotaStr != null ? Integer.valueOf(numNotaStr) : 0; 
-    
-    String qtCuponsStr = obterValorSeguro(deal, "ufCrm96Qtcupons", "UF_CRM_96_QTCUPONS");
-    Integer quantidadeCupons = qtCuponsStr != null ? Integer.valueOf(qtCuponsStr) : 0;
-    
-    BigDecimal valorTotal = deal.get("opportunity") != null ? new BigDecimal(deal.get("opportunity").toString()) : BigDecimal.ZERO;
+    private CardResponse converterParaCardResponse(Map<String, Object> deal) {
+        String id = deal.get("id") != null ? deal.get("id").toString() : null;
+        String status = (String) deal.get("stageId");
+        String dataCriacao = (String) deal.get("createdTime");
+        
+        String link = obterValorSeguro(deal, "ufCrm96Linkcupom", "UF_CRM_96_LINKCUPOM"); 
+        
+        String numNotaStr = obterValorSeguro(deal, "ufCrm96Numnota", "UF_CRM_96_NUMNOTA");
+        Integer numeroNotaFiscal = numNotaStr != null ? Integer.valueOf(numNotaStr) : 0; 
+        
+        String qtCuponsStr = obterValorSeguro(deal, "ufCrm96Qtcupons", "UF_CRM_96_QTCUPONS");
+        Integer quantidadeCupons = qtCuponsStr != null ? Integer.valueOf(qtCuponsStr) : 0;
+        
+        BigDecimal valorTotal = deal.get("opportunity") != null ? new BigDecimal(deal.get("opportunity").toString()) : BigDecimal.ZERO;
 
-    return new CardResponse(id, status, dataCriacao, numeroNotaFiscal, valorTotal, link, quantidadeCupons);
-}
+        return new CardResponse(id, status, dataCriacao, numeroNotaFiscal, valorTotal, link, quantidadeCupons);
+    }
 
     private String obterValorSeguro(Map<String, Object> deal, String chaveMinusc, String chaveMaiusc) {
         if (deal.containsKey(chaveMaiusc) && deal.get(chaveMaiusc) != null) {
