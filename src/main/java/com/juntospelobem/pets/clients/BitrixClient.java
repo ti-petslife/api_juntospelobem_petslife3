@@ -92,12 +92,12 @@ public class BitrixClient {
 
         System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + resultadosBusca.size() + " cadastros!");
 
-        final Map<String, Object> contatoFallback = resultadosBusca.get(0);
+        final Map<String, Object> contatoFallback = resultadosBusca.getFirst();
 
         return resultadosBusca.stream()
                 .filter(item -> {
                     String email = obterEmailSeguro(item);
-                    return email != null && !email.trim().isEmpty() && email.contains("@");
+                    return email != null && !email.isBlank() && email.contains("@");
                 })
                 .findFirst() 
                 .map(item -> {
@@ -133,9 +133,7 @@ public class BitrixClient {
 
         try {
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-            if (response != null && response.containsKey("result")) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = (Map<String, Object>) response.get("result");
+            if (response != null && response.get("result") instanceof Map<?, ?> result) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
                 if (items != null) return items;
@@ -150,7 +148,6 @@ public class BitrixClient {
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
         String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
 
-        // 🎯 CORREÇÃO: Chave exata do filtro do Cliente (ufCrm78_1782267126)
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
                 "&filter[categoryId]=" + this.categoriaClientesId +
@@ -163,9 +160,7 @@ public class BitrixClient {
 
         try {
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-            if (response != null && response.containsKey("result")) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = (Map<String, Object>) response.get("result");
+            if (response != null && response.get("result") instanceof Map<?, ?> result) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
                 if (items != null) return items;
@@ -173,26 +168,41 @@ public class BitrixClient {
             return List.of();
         } catch (Exception e) {
             System.err.println("Erro ao comunicar com o Bitrix (Clientes): " + e.getMessage());
-            return List.of(); // Retorna lista vazia para permitir a próxima tentativa do loop
+            return List.of();
         }
     }
 
+    /**
+     * Gera todas as variações possíveis de um documento (CPF ou CNPJ)
+     * para buscar de forma resiliente no Bitrix.
+     */
     private Set<String> gerarVariacoesDocumento(String documento) {
         if (documento == null || documento.isBlank()) return Collections.emptySet();
 
-        String apenasNumeros = documento.replaceAll("\\D", "");
         Set<String> variacoes = new LinkedHashSet<>();
+        
+        // 1. O próprio documento como recebido
+        variacoes.add(documento.trim());
 
-        variacoes.add(aplicarMascaraBitrix(documento));
+        String apenasNumeros = documento.replaceAll("\\D", "");
+        if (apenasNumeros.isBlank()) return variacoes;
 
-        if (apenasNumeros.length() > 0 && apenasNumeros.length() <= 11) {
-            variacoes.add(String.format("%11s", apenasNumeros).replace(' ', '0'));
-        } else if (apenasNumeros.length() > 11 && apenasNumeros.length() <= 14) {
-            variacoes.add(String.format("%14s", apenasNumeros).replace(' ', '0'));
+        // 2. Apenas números sem formatação
+        variacoes.add(apenasNumeros);
+
+        // 3. Documento com Zeros à Esquerda garantidos (11 para CPF, 14 para CNPJ)
+        if (apenasNumeros.length() <= 11) {
+            String cpfComZeros = String.format("%011d", Long.parseLong(apenasNumeros));
+            variacoes.add(cpfComZeros);
+            variacoes.add(formatarCpf(cpfComZeros));
         } else {
-            variacoes.add(apenasNumeros);
+            // Trata CNPJ (até 14 dígitos)
+            String cnpjComZeros = String.format("%014d", Long.parseLong(apenasNumeros));
+            variacoes.add(cnpjComZeros);
+            variacoes.add(formatarCnpj(cnpjComZeros));
         }
 
+        // 4. Sem zeros iniciais (Caso o Bitrix tenha salvo como valor numérico)
         String semZerosIniciais = apenasNumeros.replaceFirst("^0+", "");
         if (!semZerosIniciais.isEmpty()) {
             variacoes.add(semZerosIniciais);
@@ -201,22 +211,12 @@ public class BitrixClient {
         return variacoes;
     }
 
-    private String aplicarMascaraBitrix(String documento) {
-        if (documento == null || documento.isBlank()) return "";
+    private String formatarCpf(String cpf11Digitos) {
+        return cpf11Digitos.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
+    }
 
-        String apenasNumeros = documento.replaceAll("\\D", "");
-
-        if (apenasNumeros.length() <= 11) {
-            String cpfPad = String.format("%11s", apenasNumeros).replace(' ', '0');
-            return cpfPad.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
-        } 
-        
-        if (apenasNumeros.length() <= 14) {
-            String cnpjPad = String.format("%14s", apenasNumeros).replace(' ', '0');
-            return cnpjPad.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
-        }
-
-        return documento;
+    private String formatarCnpj(String cnpj14Digitos) {
+        return cnpj14Digitos.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
     }
 
     private CardResponse converterParaCardResponse(Map<String, Object> deal) {
