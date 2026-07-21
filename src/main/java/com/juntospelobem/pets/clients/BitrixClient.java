@@ -45,18 +45,42 @@ public class BitrixClient {
         return dados.email(); 
     }
 
-    public List<CardResponse> buscarCardsPorDocumento(String documento) {
-        String docLimpoPesquisa = documento != null ? documento.replaceAll("\\D", "") : "";
-        if (docLimpoPesquisa.isEmpty()) return List.of();
+   public List<CardResponse> buscarCardsPorDocumento(String documento) {
+        if (documento == null || documento.isBlank()) return List.of();
 
-        String documentoFormatado = aplicarMascaraBitrix(documento);
-        
-        String docCodificado = java.net.URLEncoder.encode(documentoFormatado, java.nio.charset.StandardCharsets.UTF_8);
+        String docApenasNumeros = documento.replaceAll("\\D", "");
+        if (docApenasNumeros.isEmpty()) return List.of();
+
+        String docFormatado = aplicarMascaraBitrix(documento);
+        List<Map<String, Object>> items = executarConsultaCardsBitrix(docFormatado);
+
+        if (items.isEmpty()) {
+            items = executarConsultaCardsBitrix(docApenasNumeros);
+        }
+
+        if (items.isEmpty() && docApenasNumeros.startsWith("0")) {
+            String docSemZeroInicial = docApenasNumeros.replaceFirst("^0+", "");
+            System.out.println("⚠️ Tentando buscar cards sem o zero à esquerda: " + docSemZeroInicial);
+            items = executarConsultaCardsBitrix(docSemZeroInicial);
+        }
+
+        if (items.isEmpty()) {
+            System.out.println("⚠️ Nenhum card encontrado para o documento nas 3 tentativas de busca.");
+            return List.of();
+        }
+
+        return items.stream()
+                .map(this::converterParaCardResponse)
+                .toList();
+    }
+
+    private List<Map<String, Object>> executarConsultaCardsBitrix(String valorCgc) {
+        String docCodificado = java.net.URLEncoder.encode(valorCgc, java.nio.charset.StandardCharsets.UTF_8);
 
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaCardsId +
                 "&filter[categoryId]=" + this.categoriaCardsId +
-                "&filter[ufCrm96Cgc]=" + docCodificado + 
+                "&filter[ufCrm96Cgc]=" + docCodificado +
                 "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=stageId" +
@@ -65,27 +89,20 @@ public class BitrixClient {
                 "&select[]=ufCrm96Numnota" +
                 "&select[]=ufCrm96Linkcupom" +
                 "&select[]=ufCrm96Qtcupons" +
-                "&order[id]=desc"; 
+                "&order[id]=desc";
 
         try {
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-
             if (response != null && response.containsKey("result")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> result = (Map<String, Object>) response.get("result");
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-
-                if (items != null && !items.isEmpty()) {
-                    return items.stream()
-                            .map(this::converterParaCardResponse)
-                            .toList(); 
-                }
+                if (items != null) return items;
             }
-            return List.of(); 
-
+            return List.of();
         } catch (Exception e) {
-            System.err.println("Erro ao comunicar com o Bitrix: " + e.getMessage());
+            System.err.println("Erro ao comunicar com o Bitrix (Cards): " + e.getMessage());
             return List.of();
         }
     }
