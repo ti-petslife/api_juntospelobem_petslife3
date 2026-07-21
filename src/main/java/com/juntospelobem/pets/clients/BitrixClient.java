@@ -56,7 +56,7 @@ public class BitrixClient {
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaCardsId +
                 "&filter[categoryId]=" + this.categoriaCardsId +
-                "&filter[UF_CRM_96_C_GC]=" + docCodificado + 
+                "&filter[ufCrm96_CGC]=" + docCodificado + 
                 "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=stageId" +
