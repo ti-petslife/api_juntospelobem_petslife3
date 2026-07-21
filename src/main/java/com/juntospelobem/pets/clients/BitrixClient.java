@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -131,42 +130,44 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
         }
     }
 
-    public ClienteDados buscarDadosClientePorDocumento(String documento) {
-        String documentoFormatado = aplicarMascaraBitrix(documento);
-        
-        String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
-                "entityTypeId=" + this.spaClientesId +
-                "&filter[categoryId]=" + this.categoriaClientesId +
-                "&filter[ufCrm78_1782267126]=" + documentoFormatado + 
-                "&select[]=ufCrm78_1782267707&select[]=ufCrm78_1782267174"; 
+   public ClienteDados buscarDadosClientePorDocumento(String documento) {
+    String documentoFormatado = aplicarMascaraBitrix(documento);
+    
+    String url = UriComponentsBuilder.fromUriString(this.bitrixWebhookUrl + "crm.item.list.json")
+            .queryParam("entityTypeId", this.spaClientesId)
+            .queryParam("filter[categoryId]", this.categoriaClientesId)
+            .queryParam("filter[ufCrm78_1782267126]", documentoFormatado)
+            .queryParam("select[]", "ufCrm78_1782267707")
+            .queryParam("select[]", "ufCrm78_1782267174")
+            .build()
+            .encode() 
+            .toUriString();
 
-        try {
-            Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-
-            if (response != null && response.containsKey("result")) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> result = (Map<String, Object>) response.get("result");
+    try {
+        Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
+        if (response != null && response.containsKey("result")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> result = (Map<String, Object>) response.get("result");
+            
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+            
+            if (items != null && !items.isEmpty()) {
+                Map<String, Object> contato = items.get(0);
+                System.out.println("Chaves do Bitrix: " + contato.keySet());
+                String id = contato.get("ufCrm78_1782267707") != null ? contato.get("ufCrm78_1782267707").toString() : "";
+                String email = (String) contato.get("ufCrm78_1782267174");
                 
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-                
-                if (items != null && !items.isEmpty()) {
-                    Map<String, Object> contato = items.get(0);
-                    System.out.println("Chaves do Bitrix: " + items.get(0).keySet());
-                    String id = contato.get("ufCrm78_1782267707") != null ? contato.get("ufCrm78_1782267707").toString() : "";
-                    String email = (String) contato.get("ufCrm78_1782267174");
-                    
-                    return new ClienteDados(id, email); 
-                }
+                return new ClienteDados(id, email);
             }
-            throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
-
-        } catch (ClienteNaoEncontradoException e) {
-            throw e; 
-        } catch (Exception e) {
-            throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
+        throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
+    } catch (ClienteNaoEncontradoException e) {
+        throw e;
+    } catch (Exception e) {
+        throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
     }
+}
 
     private String aplicarMascaraBitrix(String documento) {
         if (documento == null) return "";
