@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 @Component
@@ -23,13 +23,6 @@ public class BitrixClient {
     
     private final int categoriaClientesId;
     private final int categoriaCardsId;
-
-    private String obterEmailSeguro(Map<String, Object> item) {
-        if (item.get("ufCrm78_1782267174") != null) return item.get("ufCrm78_1782267174").toString();
-        if (item.get("email") != null) return item.get("email").toString();
-        if (item.get("EMAIL") != null) return item.get("EMAIL").toString();
-        return null;
-    }
 
     public BitrixClient(
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
@@ -103,20 +96,19 @@ public class BitrixClient {
 
         return resultadosBusca.stream()
                 .filter(item -> {
-                    // Busca o e-mail em qualquer uma das chaves possíveis que o Bitrix possa entregar
                     String email = obterEmailSeguro(item);
                     return email != null && !email.trim().isEmpty() && email.contains("@");
                 })
                 .findFirst() 
                 .map(item -> {
-                    String id = item.get("id") != null ? item.get("id").toString() : "";
+                    String id = obterIdSeguro(item);
                     String email = obterEmailSeguro(item);
                     System.out.println("✅ Cliente e E-mail validados com sucesso: " + email);
                     return new ClienteDados(id, email);
                 })
                 .orElseGet(() -> {
                     System.out.println("⚠️ Usando fallback para os dados do cliente.");
-                    String id = contatoFallback.get("id") != null ? contatoFallback.get("id").toString() : "";
+                    String id = obterIdSeguro(contatoFallback);
                     String email = obterEmailSeguro(contatoFallback);
                     return new ClienteDados(id, email);
                 });
@@ -155,20 +147,18 @@ public class BitrixClient {
         }
     }
 
-    // 💡 Ajuste cirúrgico do filtro de Clientes no Bitrix
-    // 💡 Ajuste cirúrgico do filtro de Clientes no Bitrix
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
         String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
 
-        // Alinhamento exato com a SPA 1174 e Categoria 152 do seu Bitrix
+        // 🎯 CORREÇÃO: Chave exata do filtro do Cliente (ufCrm78_1782267126)
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
                 "&filter[categoryId]=" + this.categoriaClientesId +
-                "&filter[ufCrm96Cgc]=" + docCodificado + // 🎯 CORREÇÃO: Chave exata do campo CGC no Bitrix
+                "&filter[ufCrm78_1782267126]=" + docCodificado +
                 "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=ufCrm78_1782267174" +
-                "&select[]=email" +                       // Mapeamento abrangente de e-mail
+                "&select[]=email" +
                 "&order[id]=desc";
 
         try {
@@ -182,7 +172,8 @@ public class BitrixClient {
             }
             return List.of();
         } catch (Exception e) {
-            throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
+            System.err.println("Erro ao comunicar com o Bitrix (Clientes): " + e.getMessage());
+            return List.of(); // Retorna lista vazia para permitir a próxima tentativa do loop
         }
     }
 
@@ -229,7 +220,7 @@ public class BitrixClient {
     }
 
     private CardResponse converterParaCardResponse(Map<String, Object> deal) {
-        String id = deal.get("id") != null ? deal.get("id").toString() : null;
+        String id = obterValorSeguro(deal, "id", "ID");
         String status = (String) deal.get("stageId");
         String dataCriacao = (String) deal.get("createdTime");
         
@@ -244,6 +235,20 @@ public class BitrixClient {
         BigDecimal valorTotal = deal.get("opportunity") != null ? new BigDecimal(deal.get("opportunity").toString()) : BigDecimal.ZERO;
 
         return new CardResponse(id, status, dataCriacao, numeroNotaFiscal, valorTotal, link, quantidadeCupons);
+    }
+
+    private String obterEmailSeguro(Map<String, Object> item) {
+        if (item.get("ufCrm78_1782267174") != null) return item.get("ufCrm78_1782267174").toString();
+        if (item.get("email") != null) return item.get("email").toString();
+        if (item.get("EMAIL") != null) return item.get("EMAIL").toString();
+        return null;
+    }
+
+    private String obterIdSeguro(Map<String, Object> item) {
+        if (item.get("ufCrm78_1782267707") != null) return item.get("ufCrm78_1782267707").toString();
+        if (item.get("id") != null) return item.get("id").toString();
+        if (item.get("ID") != null) return item.get("ID").toString();
+        return "";
     }
 
     private String obterValorSeguro(Map<String, Object> deal, String chaveMinusc, String chaveMaiusc) {
