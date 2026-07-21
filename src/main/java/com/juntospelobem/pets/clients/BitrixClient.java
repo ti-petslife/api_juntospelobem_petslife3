@@ -130,18 +130,18 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
         }
     }
 
-  public ClienteDados buscarDadosClientePorDocumento(String documento) {
+public ClienteDados buscarDadosClientePorDocumento(String documento) {
         String documentoFormatado = aplicarMascaraBitrix(documento);
         
-        String url = UriComponentsBuilder.fromUriString(this.bitrixWebhookUrl + "crm.item.list.json")
-                .queryParam("entityTypeId", this.spaClientesId)
-                .queryParam("filter[categoryId]", this.categoriaClientesId)
-                .queryParam("filter[ufCrm78_1782267126]", documentoFormatado)
-                .queryParam("select[]", "ufCrm78_1782267707")
-                .queryParam("select[]", "ufCrm78_1782267174")
-                .build()
-                .encode() 
-                .toUriString();
+        String docCodificado = java.net.URLEncoder.encode(documentoFormatado, java.nio.charset.StandardCharsets.UTF_8);
+
+        String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
+                "entityTypeId=" + this.spaClientesId +
+                "&filter[categoryId]=" + this.categoriaClientesId +
+                "&filter[ufCrm78_1782267126]=" + docCodificado +
+                "&select[]=ufCrm78_1782267707" +
+                "&select[]=ufCrm78_1782267174" +
+                "&order[id]=desc";
 
         try {
             Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
@@ -155,7 +155,6 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
                 if (items != null && !items.isEmpty()) {
                     System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + items.size() + " cadastros para o documento informado!");
 
-                    // 💡 JEITO SÊNIOR: Usando Java Streams para garantir a qualidade do dado
                     return items.stream()
                             .filter(item -> {
                                 String email = (String) item.get("ufCrm78_1782267174");
