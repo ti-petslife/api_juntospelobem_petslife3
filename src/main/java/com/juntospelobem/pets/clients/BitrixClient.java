@@ -1,21 +1,30 @@
 package com.juntospelobem.pets.clients;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juntospelobem.pets.dtos.CardResponse;
 import com.juntospelobem.pets.dtos.ClienteDados;
 import com.juntospelobem.pets.exceptions.ClienteNaoEncontradoException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
 
 @Component
 public class BitrixClient {
 
-    private final RestClient restClient;
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    private final ObjectMapper objectMapper;
     private final String bitrixWebhookUrl;
     
     private final int spaClientesId;
@@ -24,19 +33,21 @@ public class BitrixClient {
     private final int categoriaClientesId;
     private final int categoriaCardsId;
 
+    // 💡 JEITO SÊNIOR: Injeção de Dependência do ObjectMapper gerenciado pelo Spring
     public BitrixClient(
+            ObjectMapper objectMapper,
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
             @Value("${bitrix.spa.clientes-id}") int spaClientesId,
             @Value("${bitrix.spa.cards-id}") int spaCardsId,
             @Value("${bitrix.spa.category-id.clientes}") int categoriaClientesId,
             @Value("${bitrix.spa.category-id.cards}") int categoriaCardsId) {
         
+        this.objectMapper = objectMapper;
         this.bitrixWebhookUrl = bitrixWebhookUrl.endsWith("/") ? bitrixWebhookUrl : bitrixWebhookUrl + "/";
         this.spaClientesId = spaClientesId;
         this.spaCardsId = spaCardsId;
         this.categoriaClientesId = categoriaClientesId;
         this.categoriaCardsId = categoriaCardsId;
-        this.restClient = RestClient.create(); 
     }
 
     public String buscarEmailPorDocumento(String documento) {
@@ -78,10 +89,10 @@ public class BitrixClient {
         for (String termoBusca : variacoes) {
             System.out.println("🔍 Consultando cliente no Bitrix com termo: " + termoBusca);
             
-            // 1. Tenta busca exata com colchetes não-codificados
+            // 1. Tenta busca exata
             resultadosBusca = executarConsultaClientesBitrix(termoBusca, false);
             
-            // 2. Fallback: Busca aproximada LIKE
+            // 2. Fallback: Busca aproximada LIKE caso o documento tenha tamanho suficiente
             if (resultadosBusca.isEmpty() && termoBusca.replaceAll("\\D", "").length() >= 8) {
                 System.out.println("🔄 Tentando busca aproximada (LIKE) para: " + termoBusca);
                 resultadosBusca = executarConsultaClientesBitrix(termoBusca, true);
@@ -111,14 +122,13 @@ public class BitrixClient {
     }
 
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca, boolean usarFiltroAproximado) {
-        String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
+        // Preservamos os caracteres literais para a query string do Bitrix
         String filtroChave = usarFiltroAproximado ? "filter[%ufCrm78_1782267126]=" : "filter[ufCrm78_1782267126]=";
 
-        // 💡 CONSTRUÇÃO SÊNIOR: Montagem manual que preserva os colchetes literais para a API em PHP do Bitrix
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
                 "&filter[categoryId]=" + this.categoriaClientesId +
-                "&" + filtroChave + docCodificado +
+                "&" + filtroChave + codificarValorParametro(valorBusca) +
                 "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=ufCrm78_1782267174" +
@@ -129,12 +139,10 @@ public class BitrixClient {
     }
 
     private List<Map<String, Object>> executarConsultaCardsBitrix(String valorCgc) {
-        String docCodificado = URLEncoder.encode(valorCgc, StandardCharsets.UTF_8);
-
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaCardsId +
                 "&filter[categoryId]=" + this.categoriaCardsId +
-                "&filter[ufCrm96Cgc]=" + docCodificado +
+                "&filter[ufCrm96Cgc]=" + codificarValorParametro(valorCgc) +
                 "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=stageId" +
@@ -150,24 +158,44 @@ public class BitrixClient {
 
     private List<Map<String, Object>> realizarRequisicaoGet(String url, String contexto) {
         try {
-            Map<String, Object> response = restClient.get()
-                    .uri(url)
-                    .retrieve()
-                    .body(Map.class);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .header("Accept", "application/json")
+                    .build();
 
-            // Pattern Matching for instanceof
-            if (response != null && response.get("result") instanceof Map<?, ?> result) {
-                if (result.get("items") instanceof List<?> itemsRaw) {
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> items = (List<Map<String, Object>>) itemsRaw;
-                    return items;
+            HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200 && response.body() != null) {
+                // Utilizando a instância injetada do Jackson
+                Map<?, ?> mapResponse = objectMapper.readValue(response.body(), Map.class);
+
+                if (mapResponse.get("result") instanceof Map<?, ?> result) {
+                    if (result.get("items") instanceof List<?> itemsRaw) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> items = (List<Map<String, Object>>) itemsRaw;
+                        return items;
+                    }
                 }
+            } else {
+                System.err.println("⚠️ Resposta HTTP " + response.statusCode() + " do Bitrix (" + contexto + ")");
             }
             return List.of();
+
         } catch (Exception e) {
-            System.err.println("Erro ao comunicar com o Bitrix (" + contexto + "): " + e.getMessage());
+            System.err.println("Erro na chamada nativa ao Bitrix (" + contexto + "): " + e.getMessage());
             return List.of();
         }
+    }
+
+    private String codificarValorParametro(String valor) {
+        if (valor == null) return "";
+        // O URLEncoder transforma espaço em + e barras em %2F. 
+        // Substituímos %2F por / e + por %20 para garantir compatibilidade exata com o Bitrix
+        return URLEncoder.encode(valor, StandardCharsets.UTF_8)
+                .replace("%2F", "/")
+                .replace("+", "%20");
     }
 
     private Set<String> gerarVariacoesDocumento(String documento) {
