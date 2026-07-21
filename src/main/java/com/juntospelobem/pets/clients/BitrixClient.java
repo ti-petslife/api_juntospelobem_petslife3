@@ -59,9 +59,10 @@ public class BitrixClient {
         List<Map<String, Object>> items = List.of();
 
         for (String termoBusca : variacoes) {
-            items = executarConsultaCardsBitrix(termoBusca);
+            // 💡 Atualizado para chamar o novo método paginado
+            items = executarConsultaCardsBitrixPaginado(termoBusca);
             if (!items.isEmpty()) {
-                System.out.println("✅ Cards encontrados no Bitrix usando o termo: " + termoBusca);
+                System.out.println("✅ " + items.size() + " Cards encontrados no Bitrix usando o termo: " + termoBusca);
                 break; 
             }
         }
@@ -132,22 +133,67 @@ public class BitrixClient {
         return realizarRequisicaoGet(url, "Clientes");
     }
 
-    private List<Map<String, Object>> executarConsultaCardsBitrix(String valorCgc) {
-        String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
-                "entityTypeId=" + this.spaCardsId +
-                "&filter[categoryId]=" + this.categoriaCardsId +
-                "&filter[ufCrm96Cgc]=" + codificarValorParametro(valorCgc) +
-                "&select[]=id" +
-                "&select[]=ufCrm78_1782267707" +
-                "&select[]=stageId" +
-                "&select[]=createdTime" +
-                "&select[]=opportunity" +
-                "&select[]=ufCrm96Numnota" +
-                "&select[]=ufCrm96Linkcupom" +
-                "&select[]=ufCrm96Qtcupons" +
-                "&order[id]=desc";
+    // 💡 SOLUÇÃO SÊNIOR: Método dedicado para paginação de Cards via ponteiro 'next' e 'start'
+    private List<Map<String, Object>> executarConsultaCardsBitrixPaginado(String valorCgc) {
+        List<Map<String, Object>> todosOsCards = new ArrayList<>();
+        int start = 0;
+        boolean temMaisPaginas = true;
 
-        return realizarRequisicaoGet(url, "Cards");
+        while (temMaisPaginas) {
+            String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
+                    "entityTypeId=" + this.spaCardsId +
+                    "&filter[categoryId]=" + this.categoriaCardsId +
+                    "&filter[ufCrm96Cgc]=" + codificarValorParametro(valorCgc) +
+                    "&start=" + start +
+                    "&select[]=id" +
+                    "&select[]=ufCrm78_1782267707" +
+                    "&select[]=stageId" +
+                    "&select[]=createdTime" +
+                    "&select[]=opportunity" +
+                    "&select[]=ufCrm96Numnota" +
+                    "&select[]=ufCrm96Linkcupom" +
+                    "&select[]=ufCrm96Qtcupons" +
+                    "&order[id]=desc";
+
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofSeconds(10))
+                        .GET()
+                        .header("Accept", "application/json")
+                        .build();
+
+                HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() == 200 && response.body() != null) {
+                    Map<?, ?> mapResponse = OBJECT_MAPPER.readValue(response.body(), Map.class);
+
+                    if (mapResponse.get("result") instanceof Map<?, ?> result) {
+                        if (result.get("items") instanceof List<?> itemsRaw) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> items = (List<Map<String, Object>>) itemsRaw;
+                            todosOsCards.addAll(items);
+                        }
+                    }
+
+                    // Verifica se existe o atributo 'next' indicando mais páginas
+                    if (mapResponse.containsKey("next") && mapResponse.get("next") != null) {
+                        start = Integer.parseInt(mapResponse.get("next").toString());
+                    } else {
+                        temMaisPaginas = false;
+                    }
+                } else {
+                    System.err.println("⚠️ Resposta HTTP " + response.statusCode() + " do Bitrix (Cards Paginados)");
+                    temMaisPaginas = false;
+                }
+
+            } catch (Exception e) {
+                System.err.println("Erro ao buscar página de cards (" + start + ") no Bitrix: " + e.getMessage());
+                temMaisPaginas = false;
+            }
+        }
+
+        return todosOsCards;
     }
 
     private List<Map<String, Object>> realizarRequisicaoGet(String url, String contexto) {
