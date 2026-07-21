@@ -21,12 +21,10 @@ import java.util.*;
 @Component
 public class BitrixClient {
 
-    // 💡 SOLUÇÃO SÊNIOR: Cliente HTTP Nativo reutilizável
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    // 💡 SOLUÇÃO SÊNIOR: Singleton Thread-Safe do ObjectMapper pré-configurado
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -36,7 +34,6 @@ public class BitrixClient {
     private final int categoriaClientesId;
     private final int categoriaCardsId;
 
-    // Construtor limpo: O Spring injetará apenas as variáveis do application.properties
     public BitrixClient(
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
             @Value("${bitrix.spa.clientes-id}") int spaClientesId,
@@ -90,10 +87,8 @@ public class BitrixClient {
         for (String termoBusca : variacoes) {
             System.out.println("🔍 Consultando cliente no Bitrix com termo: " + termoBusca);
             
-            // 1. Tenta busca exata
             resultadosBusca = executarConsultaClientesBitrix(termoBusca, false);
             
-            // 2. Fallback: Busca aproximada LIKE caso o termo tenha relevância numérica
             if (resultadosBusca.isEmpty() && termoBusca.replaceAll("\\D", "").length() >= 8) {
                 System.out.println("🔄 Tentando busca aproximada (LIKE) para: " + termoBusca);
                 resultadosBusca = executarConsultaClientesBitrix(termoBusca, true);
@@ -109,7 +104,6 @@ public class BitrixClient {
             throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
         }
 
-        // Java 21/25 Sequenced Collections: getFirst()
         final Map<String, Object> contatoFallback = resultadosBusca.getFirst();
 
         return resultadosBusca.stream()
@@ -168,7 +162,6 @@ public class BitrixClient {
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200 && response.body() != null) {
-                // Utiliza a constante estática resiliente OBJECT_MAPPER
                 Map<?, ?> mapResponse = OBJECT_MAPPER.readValue(response.body(), Map.class);
 
                 if (mapResponse.get("result") instanceof Map<?, ?> result) {
@@ -191,7 +184,6 @@ public class BitrixClient {
 
     private String codificarValorParametro(String valor) {
         if (valor == null) return "";
-        // Garante que a barra (/) e o espaço permaneçam compreensíveis para a API REST do Bitrix24
         return URLEncoder.encode(valor, StandardCharsets.UTF_8)
                 .replace("%2F", "/")
                 .replace("+", "%20");
