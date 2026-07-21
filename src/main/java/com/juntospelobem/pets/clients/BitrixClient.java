@@ -36,13 +36,11 @@ public class BitrixClient {
         this.spaCardsId = spaCardsId;
         this.categoriaClientesId = categoriaClientesId;
         this.categoriaCardsId = categoriaCardsId;
-        
         this.restClient = RestClient.create(); 
     }
 
     public String buscarEmailPorDocumento(String documento) {
-        ClienteDados dados = buscarDadosClientePorDocumento(documento);
-        return dados.email(); 
+        return buscarDadosClientePorDocumento(documento).email(); 
     }
 
     public List<CardResponse> buscarCardsPorDocumento(String documento) {
@@ -79,19 +77,27 @@ public class BitrixClient {
 
         for (String termoBusca : variacoes) {
             System.out.println("🔍 Consultando cliente no Bitrix com termo: " + termoBusca);
-            resultadosBusca = executarConsultaClientesBitrix(termoBusca);
-            if (resultadosBusca != null && !resultadosBusca.isEmpty()) {
+            
+            // 1. Tenta busca exata com colchetes não-codificados
+            resultadosBusca = executarConsultaClientesBitrix(termoBusca, false);
+            
+            // 2. Fallback: Busca aproximada LIKE
+            if (resultadosBusca.isEmpty() && termoBusca.replaceAll("\\D", "").length() >= 8) {
+                System.out.println("🔄 Tentando busca aproximada (LIKE) para: " + termoBusca);
+                resultadosBusca = executarConsultaClientesBitrix(termoBusca, true);
+            }
+
+            if (!resultadosBusca.isEmpty()) {
                 System.out.println("✅ Cliente localizado no Bitrix usando o termo: " + termoBusca);
                 break; 
             }
         }
 
-        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
+        if (resultadosBusca.isEmpty()) {
             throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
         }
 
-        System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + resultadosBusca.size() + " cadastros!");
-
+        // Recurso Sequenced Collections (Java 21/25): getFirst()
         final Map<String, Object> contatoFallback = resultadosBusca.getFirst();
 
         return resultadosBusca.stream()
@@ -100,18 +106,26 @@ public class BitrixClient {
                     return email != null && !email.isBlank() && email.contains("@");
                 })
                 .findFirst() 
-                .map(item -> {
-                    String id = obterIdSeguro(item);
-                    String email = obterEmailSeguro(item);
-                    System.out.println("✅ Cliente e E-mail validados com sucesso: " + email);
-                    return new ClienteDados(id, email);
-                })
-                .orElseGet(() -> {
-                    System.out.println("⚠️ Usando fallback para os dados do cliente.");
-                    String id = obterIdSeguro(contatoFallback);
-                    String email = obterEmailSeguro(contatoFallback);
-                    return new ClienteDados(id, email);
-                });
+                .map(item -> new ClienteDados(obterIdSeguro(item), obterEmailSeguro(item)))
+                .orElseGet(() -> new ClienteDados(obterIdSeguro(contatoFallback), obterEmailSeguro(contatoFallback)));
+    }
+
+    private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca, boolean usarFiltroAproximado) {
+        String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
+        String filtroChave = usarFiltroAproximado ? "filter[%ufCrm78_1782267126]=" : "filter[ufCrm78_1782267126]=";
+
+        // 💡 CONSTRUÇÃO SÊNIOR: Montagem manual que preserva os colchetes literais para a API em PHP do Bitrix
+        String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
+                "entityTypeId=" + this.spaClientesId +
+                "&filter[categoryId]=" + this.categoriaClientesId +
+                "&" + filtroChave + docCodificado +
+                "&select[]=id" +
+                "&select[]=ufCrm78_1782267707" +
+                "&select[]=ufCrm78_1782267174" +
+                "&select[]=email" +
+                "&order[id]=desc";
+
+        return realizarRequisicaoGet(url, "Clientes");
     }
 
     private List<Map<String, Object>> executarConsultaCardsBitrix(String valorCgc) {
@@ -131,99 +145,79 @@ public class BitrixClient {
                 "&select[]=ufCrm96Qtcupons" +
                 "&order[id]=desc";
 
+        return realizarRequisicaoGet(url, "Cards");
+    }
+
+    private List<Map<String, Object>> realizarRequisicaoGet(String url, String contexto) {
         try {
-            Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
+            Map<String, Object> response = restClient.get()
+                    .uri(url)
+                    .retrieve()
+                    .body(Map.class);
+
+            // Pattern Matching for instanceof
             if (response != null && response.get("result") instanceof Map<?, ?> result) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-                if (items != null) return items;
+                if (result.get("items") instanceof List<?> itemsRaw) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> items = (List<Map<String, Object>>) itemsRaw;
+                    return items;
+                }
             }
             return List.of();
         } catch (Exception e) {
-            System.err.println("Erro ao comunicar com o Bitrix (Cards): " + e.getMessage());
+            System.err.println("Erro ao comunicar com o Bitrix (" + contexto + "): " + e.getMessage());
             return List.of();
         }
     }
 
-    private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
-        String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
-
-        String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
-                "entityTypeId=" + this.spaClientesId +
-                "&filter[categoryId]=" + this.categoriaClientesId +
-                "&filter[%ufCrm78_1782267126]=" + docCodificado +
-                "&select[]=id" +
-                "&select[]=ufCrm78_1782267707" +
-                "&select[]=ufCrm78_1782267174" +
-                "&select[]=email" +
-                "&order[id]=desc";
-
-        try {
-            Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-            if (response != null && response.get("result") instanceof Map<?, ?> result) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-                if (items != null) return items;
-            }
-            return List.of();
-        } catch (Exception e) {
-            System.err.println("Erro ao comunicar com o Bitrix (Clientes): " + e.getMessage());
-            return List.of();
-        }
-    }
-
-    /**
-     * Gera todas as variações possíveis de um documento (CPF ou CNPJ)
-     * para buscar de forma resiliente no Bitrix.
-     */
     private Set<String> gerarVariacoesDocumento(String documento) {
         if (documento == null || documento.isBlank()) return Collections.emptySet();
 
         Set<String> variacoes = new LinkedHashSet<>();
-        
-        // 1. O próprio documento como recebido
-        variacoes.add(documento.trim());
+        String docLimpo = documento.trim();
+        String apenasNumeros = docLimpo.replaceAll("\\D", "");
 
-        String apenasNumeros = documento.replaceAll("\\D", "");
+        variacoes.add(docLimpo);
+
         if (apenasNumeros.isBlank()) return variacoes;
 
-        // 2. Apenas números sem formatação
-        variacoes.add(apenasNumeros);
-
-        // 3. Documento com Zeros à Esquerda garantidos (11 para CPF, 14 para CNPJ)
         if (apenasNumeros.length() <= 11) {
-            String cpfComZeros = String.format("%011d", Long.parseLong(apenasNumeros));
-            variacoes.add(cpfComZeros);
-            variacoes.add(formatarCpf(cpfComZeros));
+            String cpfPad = padLeftZeros(apenasNumeros, 11);
+            variacoes.add(formatarCpf(cpfPad));
+            variacoes.add(cpfPad);
         } else {
-            // Trata CNPJ (até 14 dígitos)
-            String cnpjComZeros = String.format("%014d", Long.parseLong(apenasNumeros));
-            variacoes.add(cnpjComZeros);
-            variacoes.add(formatarCnpj(cnpjComZeros));
+            String cnpjPad = padLeftZeros(apenasNumeros, 14);
+            variacoes.add(formatarCnpj(cnpjPad));
+            variacoes.add(cnpjPad);
         }
 
-        // 4. Sem zeros iniciais (Caso o Bitrix tenha salvo como valor numérico)
         String semZerosIniciais = apenasNumeros.replaceFirst("^0+", "");
-        if (!semZerosIniciais.isEmpty()) {
+        if (!semZerosIniciais.isEmpty() && !semZerosIniciais.equals(apenasNumeros)) {
             variacoes.add(semZerosIniciais);
         }
 
         return variacoes;
     }
 
-    private String formatarCpf(String cpf11Digitos) {
-        return cpf11Digitos.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
+    private String padLeftZeros(String input, int targetLength) {
+        if (input.length() >= targetLength) return input;
+        return "0".repeat(targetLength - input.length()) + input;
     }
 
-    private String formatarCnpj(String cnpj14Digitos) {
-        return cnpj14Digitos.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
+    private String formatarCpf(String cpf11) {
+        if (cpf11.length() != 11) return cpf11;
+        return cpf11.replaceFirst("(\\d{3})(\\d{3})(\\d{3})(\\d{2})", "$1.$2.$3-$4");
+    }
+
+    private String formatarCnpj(String cnpj14) {
+        if (cnpj14.length() != 14) return cnpj14;
+        return cnpj14.replaceFirst("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
     }
 
     private CardResponse converterParaCardResponse(Map<String, Object> deal) {
         String id = obterValorSeguro(deal, "id", "ID");
         String status = (String) deal.get("stageId");
         String dataCriacao = (String) deal.get("createdTime");
-        
         String link = obterValorSeguro(deal, "ufCrm96Linkcupom", "UF_CRM_96_LINKCUPOM"); 
         
         String numNotaStr = obterValorSeguro(deal, "ufCrm96Numnota", "UF_CRM_96_NUMNOTA");
