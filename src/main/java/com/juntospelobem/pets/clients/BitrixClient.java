@@ -161,7 +161,7 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
                                 String email = (String) item.get("ufCrm78_1782267174");
                                 return email != null && !email.trim().isEmpty() && email.contains("@");
                             })
-                            .findFirst() /
+                            .findFirst() 
                             .map(item -> {
                                 String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
                                 String email = (String) item.get("ufCrm78_1782267174");
