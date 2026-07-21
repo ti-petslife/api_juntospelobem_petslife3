@@ -24,6 +24,13 @@ public class BitrixClient {
     private final int categoriaClientesId;
     private final int categoriaCardsId;
 
+    private String obterEmailSeguro(Map<String, Object> item) {
+        if (item.get("ufCrm78_1782267174") != null) return item.get("ufCrm78_1782267174").toString();
+        if (item.get("email") != null) return item.get("email").toString();
+        if (item.get("EMAIL") != null) return item.get("EMAIL").toString();
+        return null;
+    }
+
     public BitrixClient(
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
             @Value("${bitrix.spa.clientes-id}") int spaClientesId,
@@ -96,20 +103,21 @@ public class BitrixClient {
 
         return resultadosBusca.stream()
                 .filter(item -> {
-                    String email = (String) item.get("ufCrm78_1782267174");
+                    // Busca o e-mail em qualquer uma das chaves possíveis que o Bitrix possa entregar
+                    String email = obterEmailSeguro(item);
                     return email != null && !email.trim().isEmpty() && email.contains("@");
                 })
                 .findFirst() 
                 .map(item -> {
-                    String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
-                    String email = (String) item.get("ufCrm78_1782267174");
-                    System.out.println("✅ Email validado e selecionado: " + email);
+                    String id = item.get("id") != null ? item.get("id").toString() : "";
+                    String email = obterEmailSeguro(item);
+                    System.out.println("✅ Cliente e E-mail validados com sucesso: " + email);
                     return new ClienteDados(id, email);
                 })
                 .orElseGet(() -> {
-                    System.out.println("⚠️ Nenhum e-mail válido encontrado na lista. Usando fallback de segurança.");
-                    String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
-                    String email = (String) contatoFallback.get("ufCrm78_1782267174");
+                    System.out.println("⚠️ Usando fallback para os dados do cliente.");
+                    String id = contatoFallback.get("id") != null ? contatoFallback.get("id").toString() : "";
+                    String email = obterEmailSeguro(contatoFallback);
                     return new ClienteDados(id, email);
                 });
     }
@@ -147,15 +155,20 @@ public class BitrixClient {
         }
     }
 
+    // 💡 Ajuste cirúrgico do filtro de Clientes no Bitrix
+    // 💡 Ajuste cirúrgico do filtro de Clientes no Bitrix
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
         String docCodificado = URLEncoder.encode(valorBusca, StandardCharsets.UTF_8);
 
+        // Alinhamento exato com a SPA 1174 e Categoria 152 do seu Bitrix
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
                 "&filter[categoryId]=" + this.categoriaClientesId +
-                "&filter[ufCrm78_1782267126]=" + docCodificado +
+                "&filter[ufCrm96Cgc]=" + docCodificado + // 🎯 CORREÇÃO: Chave exata do campo CGC no Bitrix
+                "&select[]=id" +
                 "&select[]=ufCrm78_1782267707" +
                 "&select[]=ufCrm78_1782267174" +
+                "&select[]=email" +                       // Mapeamento abrangente de e-mail
                 "&order[id]=desc";
 
         try {
@@ -165,7 +178,7 @@ public class BitrixClient {
                 Map<String, Object> result = (Map<String, Object>) response.get("result");
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-                return items;
+                if (items != null) return items;
             }
             return List.of();
         } catch (Exception e) {
