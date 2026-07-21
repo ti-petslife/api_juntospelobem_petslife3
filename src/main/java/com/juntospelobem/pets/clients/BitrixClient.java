@@ -130,44 +130,61 @@ public List<CardResponse> buscarCardsPorDocumento(String documento) {
         }
     }
 
-   public ClienteDados buscarDadosClientePorDocumento(String documento) {
-    String documentoFormatado = aplicarMascaraBitrix(documento);
-    
-    String url = UriComponentsBuilder.fromUriString(this.bitrixWebhookUrl + "crm.item.list.json")
-            .queryParam("entityTypeId", this.spaClientesId)
-            .queryParam("filter[categoryId]", this.categoriaClientesId)
-            .queryParam("filter[ufCrm78_1782267126]", documentoFormatado)
-            .queryParam("select[]", "ufCrm78_1782267707")
-            .queryParam("select[]", "ufCrm78_1782267174")
-            .build()
-            .encode() 
-            .toUriString();
+  public ClienteDados buscarDadosClientePorDocumento(String documento) {
+        String documentoFormatado = aplicarMascaraBitrix(documento);
+        
+        String url = UriComponentsBuilder.fromUriString(this.bitrixWebhookUrl + "crm.item.list.json")
+                .queryParam("entityTypeId", this.spaClientesId)
+                .queryParam("filter[categoryId]", this.categoriaClientesId)
+                .queryParam("filter[ufCrm78_1782267126]", documentoFormatado)
+                .queryParam("select[]", "ufCrm78_1782267707")
+                .queryParam("select[]", "ufCrm78_1782267174")
+                .build()
+                .encode() 
+                .toUriString();
 
-    try {
-        Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
-        if (response != null && response.containsKey("result")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> result = (Map<String, Object>) response.get("result");
-            
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-            
-            if (items != null && !items.isEmpty()) {
-                Map<String, Object> contato = items.get(0);
-                System.out.println("Chaves do Bitrix: " + contato.keySet());
-                String id = contato.get("ufCrm78_1782267707") != null ? contato.get("ufCrm78_1782267707").toString() : "";
-                String email = (String) contato.get("ufCrm78_1782267174");
+        try {
+            Map<String, Object> response = restClient.get().uri(url).retrieve().body(Map.class);
+            if (response != null && response.containsKey("result")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> result = (Map<String, Object>) response.get("result");
                 
-                return new ClienteDados(id, email);
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
+                
+                if (items != null && !items.isEmpty()) {
+                    System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + items.size() + " cadastros para o documento informado!");
+
+                    // 💡 JEITO SÊNIOR: Usando Java Streams para garantir a qualidade do dado
+                    return items.stream()
+                            .filter(item -> {
+                                String email = (String) item.get("ufCrm78_1782267174");
+                                return email != null && !email.trim().isEmpty() && email.contains("@");
+                            })
+                            .findFirst() /
+                            .map(item -> {
+                                String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
+                                String email = (String) item.get("ufCrm78_1782267174");
+                                System.out.println("✅ Email validado e selecionado: " + email);
+                                return new ClienteDados(id, email);
+                            })
+                            .orElseGet(() -> {
+                                
+                                System.out.println("⚠️ Nenhum e-mail válido encontrado. Usando fallback de segurança.");
+                                Map<String, Object> contatoFallback = items.get(0);
+                                String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
+                                String email = (String) contatoFallback.get("ufCrm78_1782267174");
+                                return new ClienteDados(id, email);
+                            });
+                }
             }
+            throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
+        } catch (ClienteNaoEncontradoException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
-        throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
-    } catch (ClienteNaoEncontradoException e) {
-        throw e;
-    } catch (Exception e) {
-        throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
     }
-}
 
     private String aplicarMascaraBitrix(String documento) {
         if (documento == null) return "";
