@@ -1,5 +1,6 @@
 package com.juntospelobem.pets.clients;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.juntospelobem.pets.dtos.CardResponse;
 import com.juntospelobem.pets.dtos.ClienteDados;
@@ -20,29 +21,29 @@ import java.util.*;
 @Component
 public class BitrixClient {
 
+    // 💡 SOLUÇÃO SÊNIOR: Cliente HTTP Nativo reutilizável
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    private final ObjectMapper objectMapper;
+    // 💡 SOLUÇÃO SÊNIOR: Singleton Thread-Safe do ObjectMapper pré-configurado
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
     private final String bitrixWebhookUrl;
-    
     private final int spaClientesId;
     private final int spaCardsId;
-    
     private final int categoriaClientesId;
     private final int categoriaCardsId;
 
-    // 💡 JEITO SÊNIOR: Injeção de Dependência do ObjectMapper gerenciado pelo Spring
+    // Construtor limpo: O Spring injetará apenas as variáveis do application.properties
     public BitrixClient(
-            ObjectMapper objectMapper,
             @Value("${bitrix.webhook.url}") String bitrixWebhookUrl,
             @Value("${bitrix.spa.clientes-id}") int spaClientesId,
             @Value("${bitrix.spa.cards-id}") int spaCardsId,
             @Value("${bitrix.spa.category-id.clientes}") int categoriaClientesId,
             @Value("${bitrix.spa.category-id.cards}") int categoriaCardsId) {
         
-        this.objectMapper = objectMapper;
         this.bitrixWebhookUrl = bitrixWebhookUrl.endsWith("/") ? bitrixWebhookUrl : bitrixWebhookUrl + "/";
         this.spaClientesId = spaClientesId;
         this.spaCardsId = spaCardsId;
@@ -92,7 +93,7 @@ public class BitrixClient {
             // 1. Tenta busca exata
             resultadosBusca = executarConsultaClientesBitrix(termoBusca, false);
             
-            // 2. Fallback: Busca aproximada LIKE caso o documento tenha tamanho suficiente
+            // 2. Fallback: Busca aproximada LIKE caso o termo tenha relevância numérica
             if (resultadosBusca.isEmpty() && termoBusca.replaceAll("\\D", "").length() >= 8) {
                 System.out.println("🔄 Tentando busca aproximada (LIKE) para: " + termoBusca);
                 resultadosBusca = executarConsultaClientesBitrix(termoBusca, true);
@@ -108,7 +109,7 @@ public class BitrixClient {
             throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
         }
 
-        // Recurso Sequenced Collections (Java 21/25): getFirst()
+        // Java 21/25 Sequenced Collections: getFirst()
         final Map<String, Object> contatoFallback = resultadosBusca.getFirst();
 
         return resultadosBusca.stream()
@@ -122,7 +123,6 @@ public class BitrixClient {
     }
 
     private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca, boolean usarFiltroAproximado) {
-        // Preservamos os caracteres literais para a query string do Bitrix
         String filtroChave = usarFiltroAproximado ? "filter[%ufCrm78_1782267126]=" : "filter[ufCrm78_1782267126]=";
 
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
@@ -168,8 +168,8 @@ public class BitrixClient {
             HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 200 && response.body() != null) {
-                // Utilizando a instância injetada do Jackson
-                Map<?, ?> mapResponse = objectMapper.readValue(response.body(), Map.class);
+                // Utiliza a constante estática resiliente OBJECT_MAPPER
+                Map<?, ?> mapResponse = OBJECT_MAPPER.readValue(response.body(), Map.class);
 
                 if (mapResponse.get("result") instanceof Map<?, ?> result) {
                     if (result.get("items") instanceof List<?> itemsRaw) {
@@ -191,8 +191,7 @@ public class BitrixClient {
 
     private String codificarValorParametro(String valor) {
         if (valor == null) return "";
-        // O URLEncoder transforma espaço em + e barras em %2F. 
-        // Substituímos %2F por / e + por %20 para garantir compatibilidade exata com o Bitrix
+        // Garante que a barra (/) e o espaço permaneçam compreensíveis para a API REST do Bitrix24
         return URLEncoder.encode(valor, StandardCharsets.UTF_8)
                 .replace("%2F", "/")
                 .replace("+", "%20");
