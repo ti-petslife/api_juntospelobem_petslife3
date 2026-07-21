@@ -90,9 +90,44 @@ public class BitrixClient {
         }
     }
 public ClienteDados buscarDadosClientePorDocumento(String documento) {
-        String documentoFormatado = aplicarMascaraBitrix(documento);
-        
-        String docCodificado = java.net.URLEncoder.encode(documentoFormatado, java.nio.charset.StandardCharsets.UTF_8);
+        List<Map<String, Object>> resultadosBusca = executarConsultaClientesBitrix(aplicarMascaraBitrix(documento));
+
+        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
+            System.out.println("⚠️ Cliente não encontrado com máscara. Tentando busca pelos números crus...");
+            String documentoCru = documento.replaceAll("\\D", "");
+            resultadosBusca = executarConsultaClientesBitrix(documentoCru);
+        }
+
+        if (resultadosBusca == null || resultadosBusca.isEmpty()) {
+             throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
+        }
+
+        System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + resultadosBusca.size() + " cadastros!");
+
+        final Map<String, Object> contatoFallback = resultadosBusca.get(0);
+
+        return resultadosBusca.stream()
+                .filter(item -> {
+                    String email = (String) item.get("ufCrm78_1782267174");
+                    return email != null && !email.trim().isEmpty() && email.contains("@");
+                })
+                .findFirst() 
+                .map(item -> {
+                    String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
+                    String email = (String) item.get("ufCrm78_1782267174");
+                    System.out.println("✅ Email validado e selecionado: " + email);
+                    return new ClienteDados(id, email);
+                })
+                .orElseGet(() -> {
+                    System.out.println("⚠️ Nenhum e-mail válido encontrado. Usando fallback de segurança.");
+                    String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
+                    String email = (String) contatoFallback.get("ufCrm78_1782267174");
+                    return new ClienteDados(id, email);
+                });
+    }
+
+    private List<Map<String, Object>> executarConsultaClientesBitrix(String valorBusca) {
+        String docCodificado = java.net.URLEncoder.encode(valorBusca, java.nio.charset.StandardCharsets.UTF_8);
 
         String url = this.bitrixWebhookUrl + "crm.item.list.json?" +
                 "entityTypeId=" + this.spaClientesId +
@@ -107,38 +142,11 @@ public ClienteDados buscarDadosClientePorDocumento(String documento) {
             if (response != null && response.containsKey("result")) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> result = (Map<String, Object>) response.get("result");
-                
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> items = (List<Map<String, Object>>) result.get("items");
-                
-                if (items != null && !items.isEmpty()) {
-                    System.out.println("🚨 ATENÇÃO: O Bitrix retornou " + items.size() + " cadastros para o documento informado!");
-
-                    return items.stream()
-                            .filter(item -> {
-                                String email = (String) item.get("ufCrm78_1782267174");
-                                return email != null && !email.trim().isEmpty() && email.contains("@");
-                            })
-                            .findFirst() 
-                            .map(item -> {
-                                String id = item.get("ufCrm78_1782267707") != null ? item.get("ufCrm78_1782267707").toString() : "";
-                                String email = (String) item.get("ufCrm78_1782267174");
-                                System.out.println("✅ Email validado e selecionado: " + email);
-                                return new ClienteDados(id, email);
-                            })
-                            .orElseGet(() -> {
-                                
-                                System.out.println("⚠️ Nenhum e-mail válido encontrado. Usando fallback de segurança.");
-                                Map<String, Object> contatoFallback = items.get(0);
-                                String id = contatoFallback.get("ufCrm78_1782267707") != null ? contatoFallback.get("ufCrm78_1782267707").toString() : "";
-                                String email = (String) contatoFallback.get("ufCrm78_1782267174");
-                                return new ClienteDados(id, email);
-                            });
-                }
+                return items;
             }
-            throw new ClienteNaoEncontradoException("Nenhum cliente encontrado com o documento informado.");
-        } catch (ClienteNaoEncontradoException e) {
-            throw e;
+            return List.of();
         } catch (Exception e) {
             throw new RuntimeException("Erro de comunicação com o servidor do Bitrix.", e);
         }
