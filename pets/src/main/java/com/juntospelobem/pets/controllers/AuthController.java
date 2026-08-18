@@ -26,6 +26,7 @@ public class AuthController {
         
         return ResponseEntity.ok(new OtpResponse(emailMascarado));
     }
+    /*sera que vai assim */
 
     @PostMapping("/validar-codigo")
     public ResponseEntity<AuthTokenResponse> validarCodigo(@RequestBody @Valid OtpValidationRequest request) {

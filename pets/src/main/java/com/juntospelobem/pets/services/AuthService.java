@@ -51,6 +51,7 @@ public class AuthService {
             cache.evict(documento); 
             throw new OtpInvalidoException("Código inválido ou expirado.");
         }
+    /*sera que vai assim */
 
         cache.evict(documento); 
         String tokenJwt = jwtService.gerarToken(documento);
