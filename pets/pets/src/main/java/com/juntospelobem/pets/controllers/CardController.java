@@ -18,7 +18,11 @@ public class CardController {
     public CardController(CardService cardService) {
         this.cardService = cardService;
     }
+<<<<<<< HEAD:pets/src/main/java/com/juntospelobem/pets/controllers/CardController.java
     /*sera que vai assim */
+=======
+
+>>>>>>> 93938c9 (melhoria de tudo):src/main/java/com/juntospelobem/pets/controllers/CardController.java
     @GetMapping
     public ResponseEntity<List<CardResponse>> listarMeusCards(
             @RequestAttribute("documentoCliente") String documento) {
