@@ -1,8 +1,0 @@
-services:
-  api:
-    build: .                 
-    container_name: pets-api-juntos-pelo-bem 
-    ports:
-      - "8080:8080"          
-    restart: always         
- 
