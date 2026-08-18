@@ -20,10 +20,10 @@ public class CacheCleaner {
         this.cacheManager = cacheManager;
     }
 
-    @Scheduled(fixedRate = 300000)
+ @Scheduled(fixedRate = 3600000)
     public void limparCacheOtp() {
         Objects.requireNonNull(cacheManager.getCache("otpCache")).clear();
-        log.info("🧹 Faxina no Cache: Códigos OTP antigos apagados da memória!");
+        log.info("Faxina no Cache: Códigos OTP antigos e abandonados foram purgados da memória.");
     }
 
     @Scheduled(fixedRate = 3600000)

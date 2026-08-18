@@ -11,3 +11,4 @@ target/
 HELP.md
 README.md
 mvnw.cmd
+.env

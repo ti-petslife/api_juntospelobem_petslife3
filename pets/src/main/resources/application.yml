@@ -6,8 +6,8 @@ spring:
     virtual:
       enabled: true 
   mail:
-    host: smtp.office365.com
-    port: 587
+    host: ${EMAIL_HOST}
+    port: ${EMAIL_PORT}
     username: ${EMAIL_USERNAME}
     password: ${EMAIL_PASSWORD}
     properties:
@@ -17,7 +17,7 @@ spring:
           starttls:
             enable: true
           ssl:
-            trust: "smtp.office365.com"
+            trust: ${EMAIL_HOST}
 api:
   security:
     token:
@@ -27,10 +27,9 @@ api:
 bitrix:
   webhook:
     url: ${BITRIX_WEBHOOK_URL}
-    url: "https://grupoagrofarm.bitrix24.com.br/rest/277/jver0jmyw92i6pkt/"
   spa:
-    clientes-id: 1174
-    cards-id: 1218
+    clientes-id: ${BITRIX_SPA_CLIENTES_ID}
+    cards-id: ${BITRIX_SPA_CARDS_ID}
     category-id:
       clientes: 152
       cards: 184

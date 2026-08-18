@@ -22,19 +22,23 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        System.out.println("HEADER AUTHORIZATION RECEBIDO: " + request.getHeader("Authorization"));
+        System.out.println("METODO: " + request.getMethod() + " | URI: " + request.getRequestURI());
 
+        // 💡 Jeito Sênior: Deixa o Preflight passar sem exigir Token
+        // O CorsConfig interceptará isso na sequência e devolverá os cabeçalhos corretos.
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            response.setHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-            response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            response.setHeader("Access-Control-Allow-Headers", "*"); 
-            response.setHeader("Access-Control-Allow-Credentials", "true");
-            
-            response.setStatus(HttpServletResponse.SC_OK);
-            return; 
+            filterChain.doFilter(request, response);
+            return;
         }
 
-        if (request.getRequestURI().startsWith("/api/auth")) {
+        // 💡 Uso do Switch do Java 25 para rotas públicas
+        String uri = request.getRequestURI();
+        boolean rotaLiberada = switch (uri) {
+            case String s when s.startsWith("/api/auth") -> true;
+            default -> false;
+        };
+
+        if (rotaLiberada) {
             filterChain.doFilter(request, response);
             return;
         }

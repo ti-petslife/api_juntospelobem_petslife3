@@ -18,7 +18,6 @@ public class CardController {
         this.cardService = cardService;
     }
 
-    // Rota: GET /api/cards
     @GetMapping
     public ResponseEntity<List<CardResponse>> listarMeusCards(
             @RequestAttribute("documentoCliente") String documento) {
