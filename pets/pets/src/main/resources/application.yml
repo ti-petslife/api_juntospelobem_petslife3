@@ -1,0 +1,35 @@
+server:
+  address: 0.0.0.0
+  port: ${PORT:8080}
+spring:
+  threads:
+    virtual:
+      enabled: true 
+  mail:
+    host: ${EMAIL_HOST}
+    port: ${EMAIL_PORT}
+    username: ${EMAIL_USERNAME}
+    password: ${EMAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          ssl:
+            trust: ${EMAIL_HOST}
+api:
+  security:
+    token:
+      secret: ${JWT_SECRET}
+      expiration-minutes: 60
+
+bitrix:
+  webhook:
+    url: ${BITRIX_WEBHOOK_URL}
+  spa:
+    clientes-id: ${BITRIX_SPA_CLIENTES_ID}
+    cards-id: ${BITRIX_SPA_CARDS_ID}
+    category-id:
+      clientes: 152
+      cards: 184
