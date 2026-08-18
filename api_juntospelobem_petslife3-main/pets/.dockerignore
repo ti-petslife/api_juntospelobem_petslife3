@@ -1,0 +1,14 @@
+# Ignora toda a pasta target
+target/
+# ... mas não ignore o meu arquivo .jar específico!
+!target/pets-0.0.1-SNAPSHOT.jar
+
+# Mantém os outros ignores
+.vscode/
+.git/
+.gitattributes
+.gitignore
+HELP.md
+README.md
+mvnw.cmd
+.env
