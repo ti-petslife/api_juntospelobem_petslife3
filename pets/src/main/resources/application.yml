@@ -22,7 +22,7 @@ api:
   security:
     token:
       secret: ${JWT_SECRET}
-      expiration-minutes: 60
+      expiration-minutes: 480
 
 bitrix:
   webhook:
