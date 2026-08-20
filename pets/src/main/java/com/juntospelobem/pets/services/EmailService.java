@@ -35,7 +35,6 @@ public class EmailService {
            String htmlMsg = "<div style=\"font-family: 'Inter', 'Segoe UI', Arial, sans-serif; background-color: #f8f9fa; padding: 40px 20px;\">"
                + "<div style=\"max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center;\">"
                + "<h2 style=\"color: #1a0b2e; font-size: 26px; margin-top: 0;\">Olá!</h2>"
-               + "<p style=\"color: #4a4a4a; font-size: 16px; line-height: 1.6;\">O seu código de acesso é: <strong style=\"color: #00dbe3;\">" + codigo + "</strong></p>"
                + "<p style=\"color: #4a4a4a; font-size: 16px; line-height: 1.6; margin-bottom: 30px;\">Aqui está o seu código de acesso para o portal:</p>"
                + "<div style=\"background-color: #2b124c; padding: 20px 30px; border-radius: 8px; margin: 0 auto 30px auto; display: inline-block;\">"
                + "<h1 style=\"color: #ffffff; font-size: 36px; letter-spacing: 8px; margin: 0; font-family: monospace;\">" + codigo + "</h1>"
