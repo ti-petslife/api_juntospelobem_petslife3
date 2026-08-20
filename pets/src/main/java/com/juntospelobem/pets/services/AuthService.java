@@ -2,7 +2,6 @@ package com.juntospelobem.pets.services;
 
 import com.juntospelobem.pets.dtos.AuthTokenResponse;
 import com.juntospelobem.pets.dtos.ClienteDados;
-import com.juntospelobem.pets.dtos.OtpEntry;
 import com.juntospelobem.pets.exceptions.OtpInvalidoException;
 import com.juntospelobem.pets.clients.BitrixClient;
 import com.juntospelobem.pets.security.JwtService;
@@ -10,7 +9,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -21,8 +19,6 @@ public class AuthService {
     private final CacheManager cacheManager;
     private final EmailService emailService;
     private final JwtService jwtService;
-
-    private static final Duration VALIDADE_OTP = Duration.ofMinutes(5);
 
     public AuthService(BitrixClient bitrixClient, CacheManager cacheManager,
                         EmailService emailService, JwtService jwtService) {
@@ -37,7 +33,9 @@ public class AuthService {
         String codigoOtp = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
         
         Cache cache = Objects.requireNonNull(cacheManager.getCache("otpCache"));
-        cache.put(documento, OtpEntry.criar(codigoOtp));
+        
+        // O tempo de vida é delegado ao Caffeine configurado no CacheManager
+        cache.put(documento, codigoOtp);
         
         emailService.enviarCodigo(dadosCliente.email(), codigoOtp, dadosCliente.id());
         return mascararEmail(dadosCliente.email());
@@ -45,13 +43,14 @@ public class AuthService {
 
     public AuthTokenResponse validarCodigoEGerarToken(String documento, String codigoDigitado) {
         Cache cache = Objects.requireNonNull(cacheManager.getCache("otpCache"));
-        OtpEntry otpSalvo = cache.get(documento, OtpEntry.class);
+        
+        // Recupera a String diretamente. Se expirou no cache, retorna null automaticamente.
+        String codigoSalvo = cache.get(documento, String.class);
 
-        if (otpSalvo == null || !otpSalvo.estaValido(VALIDADE_OTP) || !otpSalvo.codigo().equals(codigoDigitado)) {
+        if (codigoSalvo == null || !codigoSalvo.equals(codigoDigitado)) {
             cache.evict(documento); 
             throw new OtpInvalidoException("Código inválido ou expirado.");
         }
-    /*sera que vai assim */
 
         cache.evict(documento); 
         String tokenJwt = jwtService.gerarToken(documento);

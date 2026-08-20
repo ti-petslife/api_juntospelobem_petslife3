@@ -26,7 +26,9 @@ api:
 
 bitrix:
   webhook:
-    url: ${BITRIX_WEBHOOK_URL}
+    url: https://grupoagrofarm.bitrix24.com.br/rest/277/jver0jmyw92i6pkt/
+
+# --- Configurações de E-mail (SMTP) ---
   spa:
     clientes-id: ${BITRIX_SPA_CLIENTES_ID}
     cards-id: ${BITRIX_SPA_CARDS_ID}
