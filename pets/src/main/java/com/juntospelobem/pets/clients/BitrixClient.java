@@ -59,10 +59,9 @@ public class BitrixClient {
         List<Map<String, Object>> items = List.of();
 
         for (String termoBusca : variacoes) {
-            // 💡 Atualizado para chamar o novo método paginado
             items = executarConsultaCardsBitrixPaginado(termoBusca);
             if (!items.isEmpty()) {
-                System.out.println("✅ " + items.size() + " Cards encontrados no Bitrix usando o termo: " + termoBusca);
+                System.out.println("🎟️" + items.size() + " Cards encontrados no Bitrix usando o termo: " + termoBusca);
                 break; 
             }
         }
@@ -133,7 +132,6 @@ public class BitrixClient {
         return realizarRequisicaoGet(url, "Clientes");
     }
 
-    // 💡 SOLUÇÃO SÊNIOR: Método dedicado para paginação de Cards via ponteiro 'next' e 'start'
     private List<Map<String, Object>> executarConsultaCardsBitrixPaginado(String valorCgc) {
         List<Map<String, Object>> todosOsCards = new ArrayList<>();
         int start = 0;
@@ -176,7 +174,6 @@ public class BitrixClient {
                         }
                     }
 
-                    // Verifica se existe o atributo 'next' indicando mais páginas
                     if (mapResponse.containsKey("next") && mapResponse.get("next") != null) {
                         start = Integer.parseInt(mapResponse.get("next").toString());
                     } else {
